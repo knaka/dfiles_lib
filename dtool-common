@@ -1,0 +1,110 @@
+#!/bin/bash
+
+subcmd="$1"
+shift
+
+is_devel() { test "$DEVEL" == "true"; }
+is_darwin() { test "$(uname)" == "Darwin"; }
+
+devel_cmntpnt=${devel_cmntpnt:-"/home/unpriv/appapp"}
+
+prod_timezone=${prod_timezone:-"UTC"}
+devel_timezone=${devel_timezone:-"UTC"}
+
+if is_devel
+then
+	name=$devel_name
+	tag=$devel_tag
+	chports=("${devel_chports[@]}")
+	timezone=$devel_timezone
+else
+	name=$prod_name
+	tag=$prod_tag
+	chports=("${prod_chports[@]}")
+	timezone=$prod_timezone
+fi
+
+read cport hport <<< ${chports[0]}
+
+type main &> /dev/null &&  main "$@"
+type main_framework &> /dev/null &&  main_framework "$@"
+
+case $subcmd in
+	build )
+		rsync -a --delete dfiles/ dfiles_lib/dfiles_copy/
+		if is_devel
+		then
+			type buid_devel_pre &> /dev/null && build_devel_pre
+			if is_initial
+			then
+				( cd dfiles_lib/ && m4 -D FRAMEWORK=${framework} -D DEVEL -D INITIAL_IMAGE Dockerfile.m4 > Dockerfile )
+			else
+				( cd dfiles_lib/ && m4 -D FRAMEWORK=${framework} -D DEVEL Dockerfile.m4 > Dockerfile )
+			fi
+		else
+			( cd dfiles_lib/ && m4 Dockerfile.m4 -D FRAMEWORK=${framework} > Dockerfile )
+			echo -n "Generating TAR Archive ... "
+			git status &> /dev/null && git archive --format=tar HEAD | bzip2 > dfiles_lib/appapp.tar.bz2
+			echo Done.
+		fi
+		docker build --tag="$tag" dfiles_lib/
+		;;
+	new | create | test_new | test_create )
+		if is_devel
+		then
+			if is_darwin
+			then
+				user_uid=1000
+				user_gid=50
+			else
+				user_uid=$(id -u)
+				user_gid=$(id -g)
+			fi
+			options_additional="
+			 --volume=$PWD/:"$devel_cmntpnt"
+			 --env USER_UID=$user_uid
+			 --env USER_GID=$user_gid
+			 --env DEVEL=true
+			 "
+		else
+			options_additional="--env DEVEL=false"
+		fi
+		options_publish=$(printf "%s\n" "${chports[@]}" | while read cport hport
+			do
+				echo " --publish=$hport:$cport"
+			done
+		)
+		docker run --detach \
+		 --name "$name" \
+		 $options_publish \
+		 $options_additional \
+		 --env TIMEZONE="$timezone" \
+		 "$tag"
+		if is_darwin
+		then
+			printf "%s\n" "${chports[@]}" | while read cport hport
+			do
+				VBoxManage controlvm "boot2docker-vm" natpf1 "${name}_${hport},tcp,127.0.0.1,$hport,,$hport"
+			done
+		fi
+		;;
+	del | delete | destroy )
+		if is_darwin
+		then
+			printf "%s\n" "${chports[@]}" | while read cport hport
+			do
+				VBoxManage controlvm "boot2docker-vm" natpf1 delete "${name}_${hport}"
+			done
+		fi
+		docker rm -f "$name"
+		;;
+	bash )
+		docker exec -i -t "$name" /bin/bash
+		;;
+	exec )
+		docker exec "$name" "$@"
+		;;
+	browse )
+		open http://localhost:$hport"$1"
+		;;
+esac

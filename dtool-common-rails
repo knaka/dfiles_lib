@@ -1,0 +1,27 @@
+#!/bin/bash
+
+framework=rails
+
+main_framework() {
+	case $subcmd in
+		bundle )
+			docker exec -it "$name" run-bundle "$@"
+			exit 0
+			;;
+		rails | rake )
+			docker exec -it "$name" run-bundle exec $subcmd "$@"
+			exit 0
+			;;
+	esac
+}
+
+is_initial() { ! test -r Gemfile || ! test -r Gemfile.lock; }
+
+build_devel_pre() {
+	if ! is_initial
+	then
+		rsync -a Gemfile Gemfile.lock dfiles_lib/
+	fi
+}
+
+source dtool-common

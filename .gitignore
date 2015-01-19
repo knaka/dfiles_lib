@@ -1,0 +1,6 @@
+Dockerfile
+Gemfile*
+*.tar.gz
+*.tar.bz2
+*.zip
+dfiles_copy

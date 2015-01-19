@@ -1,0 +1,10 @@
+#!/bin/bash
+# -*- coding: utf-8 -*-
+
+warn () { echo $0: "$@" >&2; }
+die() { warn "${@:2:$#-1}"; exit "${1:-1}"; }
+booted() { test -e /booted; }
+
+booted || die 1 "Init script is still initializaing the environment."
+cd /home/unpriv/appapp/
+PATH=/home/unpriv/.rbenv/shims:$PATH gosu unpriv bundle exec "$@"

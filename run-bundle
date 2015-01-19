@@ -1,0 +1,18 @@
+#!/bin/bash
+# -*- coding: utf-8 -*-
+
+initializing() { ! test -e /initialized; }
+initialized() { test -e /initialized; }
+forced() { test "$FORCE" == "true"; }
+
+warn() { test -n "$*" && echo $0: "$@" >&2; }
+die() { warn "${@:2:$#-1}"; exit "${1:-1}"; }
+
+while initializing && (! forced)
+do
+	echo "Init script is still initializing the environment."
+	sleep 3
+done
+
+cd /home/unpriv/appapp/
+PATH=/home/unpriv/.rbenv/shims:/usr/local/bin:$PATH gosu unpriv bundle "$@"
